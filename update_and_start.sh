@@ -8,7 +8,7 @@
 # --- 配置 ---
 TARGET_DIR="/root/nofx"
 NOFX_SERVICE_REPO_URL="https://github.com/NoFxAiOS/nofx"
-MAIN_BRANCH="main" # 假设主分支是 main
+MAIN_BRANCH="dev" # 假设主分支是 main
 
 # 颜色定义
 GREEN='\033[0;32m'
