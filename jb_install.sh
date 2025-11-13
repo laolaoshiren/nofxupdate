@@ -94,7 +94,7 @@ sudo chmod +x "$TARGET_FILE"
 
 # 4. 创建或更新全局命令软链接
 if [ ! -f "$JB_COMMAND_PATH" ] || [ ! -L "$JB_COMMAND_PATH" ]; then
-    echo -e "${YELLOW}--> 创建 '=====${RED}jb${NC}=====' 全局命令 (${JB_COMMAND_PATH})...${NC}"
+    echo -e "${YELLOW}--> 创建 'jb' 全局命令 (${JB_COMMAND_PATH})...${NC}"
     # 创建软链接
     sudo ln -sf "$TARGET_FILE" "$JB_COMMAND_PATH"
 else
@@ -105,5 +105,5 @@ fi
 echo -e "${CYAN}=========================================${NC}"
 echo -e "${GREEN}安装/更新成功！${NC}"
 echo -e "项目已安装至: ${INSTALL_DIR}"
-echo -e "现在您可以在任何地方输入 'jb' 来运行您的脚本了！"
+echo -e "现在您可以在任何地方输入 '※※${RED}jb${NC}※※' 来运行您的脚本了！"
 echo -e "========================================="
