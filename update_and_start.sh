@@ -2,132 +2,138 @@
 
 # =========================================================
 # 自动更新与启动脚本 (jb Command)
-# 功能：检查更新 -> 拉取代码 -> 构建并启动服务 -> 交互式选项
+# 功能: 检查 Git 更新 -> 执行 Git Pull -> 启动服务 -> 交互式日志/监控
 # =========================================================
 
 # --- 配置 ---
 TARGET_DIR="/root/nofx"
 NOFX_SERVICE_REPO_URL="https://github.com/NoFxAiOS/nofx"
+MAIN_BRANCH="main" # 假设主分支是 main
 
 # 颜色定义
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 echo -e "${CYAN}=========================================${NC}"
 echo -e "${CYAN}### 自动更新与启动脚本 (jb Command) ###${NC}"
 echo -e "${CYAN}=========================================${NC}"
 
-# --- 辅助函数：交互式菜单 ---
-show_interactive_menu() {
-    echo -e "\n${YELLOW}--- 请选择下一步操作 ---${NC}"
-    PS3="选择序号 (1-2): "
-    options=("查看 nofx 服务日志 (./start.sh logs)" "执行 btop 查看系统资源")
+# 1. 检查目标目录并处理首次克隆
+if [ ! -d "$TARGET_DIR" ]; then
+    echo -e "${YELLOW}警告：目标目录 ${TARGET_DIR} 不存在。正在进行首次克隆...${NC}"
+    if sudo git clone "$NOFX_SERVICE_REPO_URL" "$TARGET_DIR"; then
+        echo -e "${GREEN}克隆成功。正在进行初始化配置...${NC}"
+        
+        # 1.1. 进入目录
+        cd "$TARGET_DIR" || { echo -e "${RED}错误：无法进入 ${TARGET_DIR}。${NC}"; exit 1; }
+        
+        # 1.2. 检查并复制 config.json
+        if [ ! -f "config.json" ] && [ -f "config.json.example" ]; then
+            echo -e "${YELLOW}--> 复制 config.json.example 到 config.json...${NC}"
+            sudo cp config.json.example config.json
+        fi
+        
+        # 1.3. 赋予 start.sh 执行权限
+        if [ -f "start.sh" ]; then
+            echo -e "${YELLOW}--> 赋予 start.sh 执行权限...${NC}"
+            sudo chmod +x start.sh
+        fi
 
-    select opt in "${options[@]}" "退出脚本"
+        # 1.4. 启动服务
+        echo -e "${YELLOW}--> 执行首次服务构建和启动 (./start.sh start --build)...${NC}"
+        # 赋予当前用户对 start.sh 的执行权限，确保它可以被 sudo 执行
+        sudo chmod +x start.sh 2>/dev/null 
+        sudo ./start.sh start --build
+        
+        echo -e "${GREEN}服务初始化和启动完成。${NC}"
+        STATUS="INITIAL_CLONE"
+
+    else
+        echo -e "${RED}致命错误：Git 克隆失败。请检查网络或仓库地址。${NC}"
+        exit 1
+    fi
+else
+    # 2. 目录存在，执行更新检查
+    cd "$TARGET_DIR" || { echo -e "${RED}错误：无法进入 ${TARGET_DIR}。${NC}"; exit 1; }
+
+    echo -e "${YELLOW}--> 进入项目目录 ${TARGET_DIR}。${NC}"
+    
+    # 检查是否为 Git 仓库
+    if [ ! -d ".git" ]; then
+        echo -e "${RED}错误：${TARGET_DIR} 不是一个有效的 Git 仓库。请手动修复。${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}--> 正在执行 git fetch 检查更新...${NC}"
+    if sudo git fetch origin "$MAIN_BRANCH"; then
+        # 比较本地和远程 HEAD
+        LOCAL_HASH=$(git rev-parse HEAD)
+        REMOTE_HASH=$(git rev-parse "origin/$MAIN_BRANCH")
+
+        if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+            echo -e "${GREEN}发现新版本！正在执行 git pull...${NC}"
+            if sudo git pull origin "$MAIN_BRANCH"; then
+                echo -e "${GREEN}代码拉取成功。${NC}"
+                
+                # 重新赋予 start.sh 权限以防权限丢失 (安全措施)
+                if [ -f "start.sh" ]; then
+                    sudo chmod +x start.sh 2>/dev/null 
+                fi
+
+                echo -e "${YELLOW}--> 正在执行服务构建和重启 (./start.sh start --build)...${NC}"
+                sudo ./start.sh start --build
+                echo -e "${GREEN}服务更新和启动完成。${NC}"
+                STATUS="UPDATED"
+            else
+                echo -e "${RED}错误：git pull 失败。请手动检查冲突。${NC}"
+                STATUS="PULL_FAILED"
+            fi
+        else
+            echo -e "${YELLOW}当前已是最新版本，无需更新。${NC}"
+            STATUS="NO_UPDATE"
+        fi
+    else
+        echo -e "${RED}错误：git fetch 失败。请检查网络或 Git 配置。${NC}"
+        STATUS="FETCH_FAILED"
+    fi
+fi
+
+# 3. 交互式菜单 (无论是否更新，都提供此选项)
+if [ "$STATUS" != "PULL_FAILED" ] && [ "$STATUS" != "FETCH_FAILED" ] ; then
+    echo -e "\n${CYAN}=======================${NC}"
+    echo -e "${CYAN}请选择后续操作：${NC}"
+    
+    OPTIONS=(
+        "查看 nofx 服务日志 (./start.sh logs)" 
+        "执行 btop (系统资源监控)" 
+        "退出"
+    )
+    
+    select opt in "${OPTIONS[@]}"
     do
         case $opt in
             "查看 nofx 服务日志 (./start.sh logs)")
                 echo -e "${YELLOW}--> 正在执行 ./start.sh logs...${NC}"
-                # 切换到目标目录执行命令，因为 start.sh 在 nofx 内部
-                cd "$TARGET_DIR" || { echo -e "${RED}错误：无法切换到 $TARGET_DIR。${NC}"; exit 1; }
-                ./start.sh logs
+                # 确保在正确的目录下执行 logs
+                cd "$TARGET_DIR" || { echo -e "${RED}错误：无法进入 ${TARGET_DIR}。${NC}"; exit 1; }
+                sudo ./start.sh logs
                 break
                 ;;
-            "执行 btop 查看系统资源")
+            "执行 btop (系统资源监控)")
                 echo -e "${YELLOW}--> 正在执行 btop...${NC}"
                 btop
                 break
                 ;;
-            "退出脚本")
-                echo -e "${GREEN}脚本退出。${NC}"
+            "退出")
+                echo -e "${CYAN}操作完成，退出脚本。${NC}"
                 break
                 ;;
-            *) echo "无效选项 $REPLY";;
+            *) echo -e "${RED}无效选项 $REPLY${NC}";;
         esac
     done
-}
-
-
-# --- 1. 检查目录和自动克隆 ---
-if [ ! -d "$TARGET_DIR" ]; then
-    echo -e "${YELLOW}警告：目标目录 ${TARGET_DIR} 不存在。${NC}"
-    echo -e "${YELLOW}--> 正在自动克隆 ${NOFX_SERVICE_REPO_URL} 到 ${TARGET_DIR}...${NC}"
-    
-    # 确保父目录存在
-    sudo mkdir -p "$(dirname "$TARGET_DIR")"
-
-    if sudo git clone "$NOFX_SERVICE_REPO_URL" "$TARGET_DIR"; then
-        echo -e "${GREEN}克隆成功！${NC}"
-        # 克隆成功后，首次运行服务
-        cd "$TARGET_DIR" || { echo -e "${RED}错误：无法切换到 $TARGET_DIR。${NC}"; exit 1; }
-        echo -e "${YELLOW}--> 首次启动服务并构建: ./start.sh start --build${NC}"
-        ./start.sh start --build
-
-        # 首次启动后，询问用户下一步操作
-        show_interactive_menu
-
-    else
-        echo -e "${RED}错误：自动克隆失败。请检查网络连接、权限或仓库地址。${NC}"
-        exit 1
-    fi
-    exit 0 # 自动克隆流程结束
-fi
-
-
-# --- 2. 检查更新 ---
-cd "$TARGET_DIR" || { echo -e "${RED}错误：无法切换到 $TARGET_DIR。${NC}"; exit 1; }
-
-# 确保在 Git 仓库中
-if [ ! -d .git ]; then
-    echo -e "${RED}错误：${TARGET_DIR} 不是一个 Git 仓库。请检查目录内容。${NC}"
-    exit 1
-fi
-
-echo -e "${YELLOW}--> 1. 进入 ${TARGET_DIR} 目录，执行 git fetch...${NC}"
-sudo git fetch
-
-# 检查是否有新的提交
-UPSTREAM='@{u}'
-LOCAL=$(sudo git rev-parse @)
-REMOTE=$(sudo git rev-parse "$UPSTREAM")
-BASE=$(sudo git merge-base @ "$UPSTREAM")
-
-if [ "$LOCAL" = "$REMOTE" ]; then
-    # 没有更新
-    echo -e "${GREEN}--> 2. [无更新] 本地分支已是最新版本。${NC}"
-    
-    # 无更新时，执行日志或 btop 选项
-    show_interactive_menu
-    
-elif [ "$LOCAL" = "$BASE" ]; then
-    # 有更新
-    echo -e "${CYAN}--> 2. [有更新] 检测到新版本，执行 git pull...${NC}"
-    if sudo git pull; then
-        echo -e "${GREEN}Git Pull 成功！${NC}"
-        
-        # --- 3. 执行启动命令 ---
-        echo -e "${YELLOW}--> 3. 执行启动命令并构建: ./start.sh start --build${NC}"
-        ./start.sh start --build
-        
-        # --- 4. 再次查看日志/btop ---
-        show_interactive_menu
-    else
-        echo -e "${RED}错误：Git Pull 失败。请检查合并冲突或权限。${NC}"
-        show_interactive_menu # 失败后也允许查看日志
-    fi
-    
-elif [ "$REMOTE" = "$BASE" ]; then
-    # 本地有新的提交，远程没有
-    echo -e "${YELLOW}--> 2. [本地有新提交] 请先处理本地更改 (git push)。${NC}"
-    show_interactive_menu
-
-else
-    # 分支已分叉
-    echo -e "${RED}--> 2. [分支分叉] 本地和远程有不同的提交，请手动解决。${NC}"
-    show_interactive_menu
 fi
 
 echo -e "${CYAN}=========================================${NC}"
