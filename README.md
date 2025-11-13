@@ -2,6 +2,8 @@
 
 本项目提供了一个极简的一键安装脚本，用于在 **Debian/Ubuntu** 服务器上快速部署、更新和管理您的 Nofx 服务。
 
+Nofx 项目地址 ：https://github.com/NoFxAiOS/nofx
+
 通过全局 `jb` 命令，您可以随时检查 `/root/nofx` 服务的 Git 更新、自动拉取代码、重启服务，并在操作后方便地查看日志或系统监控。
 
 ---
