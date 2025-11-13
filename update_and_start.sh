@@ -1,90 +1,62 @@
 #!/bin/bash
 
-# --- 核心脚本自我定位功能 ---
-# SCRIPT_DIR: 获取该脚本文件所在的绝对目录路径（例如：/opt/jb_project）。
-# 这样无论 'jb' 命令从哪里执行，脚本都能找到其项目根目录。
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-TARGET_DIR="$SCRIPT_DIR/nofx"
+# --- 配置 ---
+# 您的脚本仓库地址
+REPO_URL="https://github.com/laolaoshiren/nofxupdate"
+# 安装脚本的目标目录
+INSTALL_DIR="/opt/jb_project"
+# 核心脚本名称
+SCRIPT_NAME="update_and_start.sh"
 
 echo "========================================="
-echo "### 自动更新与启动脚本 (jb Command) ###"
+echo "### jb 自动化系统安装脚本 ###"
 echo "========================================="
 
-# 1. 检查并进入 ./nofx 目录
-if [ ! -d "$TARGET_DIR" ]; then
-    echo "错误：目标目录 $TARGET_DIR 不存在。"
-    echo "请确保您已在 $SCRIPT_DIR 目录下将 'nofx' 仓库克隆或放置好。"
-    exit 1
-fi
-
-echo "--> 1. 切换到项目目录: $TARGET_DIR"
-# 切换目录，如果失败则退出
-cd "$TARGET_DIR" || { echo "错误：无法进入目录 $TARGET_DIR，请检查权限。"; exit 1; }
-
-# 额外检查：确保当前目录是一个 Git 仓库
-if ! git status &> /dev/null; then
-    echo "严重错误：$TARGET_DIR 目录不是一个 Git 仓库。请先执行 git init 或 git clone。"
-    exit 1
-fi
-
-# 2. 执行 git fetch
-echo "--> 2. 执行 git fetch 获取最新远程状态..."
-git fetch
-
-# 3. 执行 git status 并判断是否有更新
-# -uno 选项用于抑制未跟踪文件信息，使输出更简洁
-STATUS_OUTPUT=$(git status -uno 2>&1)
-UPDATED_REQUIRED=false
-
-# 检查输出中是否包含“Your branch is behind”来判断是否有更新
-if echo "$STATUS_OUTPUT" | grep -q "Your branch is behind"; then
-    UPDATED_REQUIRED=true
-fi
-
-
-if [ "$UPDATED_REQUIRED" = true ]; then
-    # ========================================
-    # 情况 A: 发现更新，执行拉取和启动/构建
-    # ========================================
-    echo "--> 3. 发现更新，执行 git pull..."
-    git pull
-
+# 1. 检查是否已经安装
+if [ -d "$INSTALL_DIR" ]; then
+    echo "警告：目录 $INSTALL_DIR 已存在。将尝试更新 jb 脚本..."
+    cd "$INSTALL_DIR" || exit 1
+    # 尝试更新脚本仓库本身
+    git pull || echo "更新脚本失败，可能不是 Git 仓库或存在冲突。请手动检查。"
+else
+    # 2. 克隆脚本仓库
+    echo "--> 正在克隆 jb 脚本仓库到 $INSTALL_DIR..."
+    git clone "$REPO_URL" "$INSTALL_DIR"
     if [ $? -ne 0 ]; then
-        echo "严重错误：git pull 失败，请手动检查（如合并冲突）。停止后续操作。"
+        echo "错误：克隆仓库失败。请检查 Git 是否安装以及网络连接。"
         exit 1
     fi
-
-    echo "--> 4. 更新完成，执行 ./start.sh start --build"
-    # 注意：./start.sh 此时在 $TARGET_DIR 目录下
-    ./start.sh start --build
-
-    echo "--> 5. 启动完成，运行 ./start.sh logs 查看日志..."
-    ./start.sh logs
-
-else
-    # ========================================
-    # 情况 B: 没有更新，询问是否查看日志
-    # ========================================
-    echo "--> 3. 本地分支与远程仓库同步，没有发现更新。"
-    
-    # 询问是否查看日志
-    while true; do
-        read -r -p "是否查看当前服务的日志 (./start.sh logs)? [Y/n]: " response
-        response=${response,,} # 转换为小写
-
-        if [[ "$response" =~ ^(yes|y|)$ ]]; then
-            echo "--> 正在运行 ./start.sh logs..."
-            ./start.sh logs
-            break
-        elif [[ "$response" =~ ^(no|n)$ ]]; then
-            echo "--> 跳过查看日志。脚本结束。"
-            break
-        else
-            echo "无效输入，请输入 Y 或 n。"
-        fi
-    done
-
+    cd "$INSTALL_DIR"
 fi
 
-echo "========================================="
-echo "脚本执行完毕。"
+# 3. 赋予执行权限
+echo "--> 赋予 $SCRIPT_NAME 执行权限..."
+chmod +x "$SCRIPT_NAME"
+
+# 4. 创建全局 jb 命令
+WRAPPER_PATH="/usr/local/bin/jb"
+echo "--> 正在创建全局命令 $WRAPPER_PATH..."
+
+# 创建一个简单的包装脚本，确保无论在哪里执行，都能正确找到主脚本并切换到正确的目录
+echo '#!/bin/bash' > "$WRAPPER_PATH"
+echo "cd $INSTALL_DIR && ./$SCRIPT_NAME \"\$@\"" >> "$WRAPPER_PATH"
+
+chmod +x "$WRAPPER_PATH"
+
+# 5. 提示用户完成安装
+echo "-----------------------------------------"
+echo "✅ jb 自动化系统脚本安装成功！"
+echo ""
+echo "### 下一步重要操作 ###"
+echo "脚本期望在 $INSTALL_DIR/nofx 目录下找到您的服务代码。"
+echo "请手动将您的 'nofx' 服务代码克隆到该路径："
+echo ""
+echo "1. 切换到项目目录："
+echo "   cd $INSTALL_DIR"
+echo ""
+echo "2. 克隆您的服务代码 (请替换 [您的 NOFX 服务仓库地址])："
+echo "   git clone [您的 NOFX 服务仓库地址] nofx"
+echo ""
+echo "部署完成后，即可在任何位置运行命令："
+echo "   jb"
+echo "-----------------------------------------"
