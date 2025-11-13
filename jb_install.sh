@@ -28,6 +28,11 @@ echo -e "${YELLOW}--> 正在更新 APT 包列表...${NC}"
 sudo apt update
 
 # --- 依赖检查与安装 ---
+# 检查是否为 Debian/Ubuntu 系统
+if ! command -v apt &> /dev/null; then
+    echo -e "${RED}错误：本安装脚本仅支持使用 'apt' 的系统 (Debian/Ubuntu)。${NC}"
+    exit 1
+fi
 
 # 1. 检查并安装 Git
 if ! command -v git &> /dev/null
@@ -45,7 +50,7 @@ then
     # 官方推荐安装方式
     curl -fsSL https://get.docker.com | bash
     # 注意：安装后需要重启或手动将当前用户添加到 docker 组 (本次安装使用 sudo)
-    echo -e "${GREEN}Docker 安装完成。可能需要重新登录或重启才能使用 docker 命令。${NC}"
+    echo -e "${GREEN}Docker 安装完成。可能需要重新登录或重启才能使当前用户无 sudo 使用 docker 命令。${NC}"
 else
     echo -e "${GREEN}--> Docker 已安装。${NC}"
 fi
