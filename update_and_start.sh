@@ -33,19 +33,18 @@ if [ ! -d "$TARGET_DIR" ]; then
         # 1.2. 检查并复制 config.json
         if [ ! -f "config.json" ] && [ -f "config.json.example" ]; then
             echo -e "${YELLOW}--> 复制 config.json.example 到 config.json...${NC}"
+            # 确保使用 sudo 复制，因为 TARGET_DIR 是 /root/nofx
             sudo cp config.json.example config.json
         fi
         
         # 1.3. 赋予 start.sh 执行权限
         if [ -f "start.sh" ]; then
             echo -e "${YELLOW}--> 赋予 start.sh 执行权限...${NC}"
-            sudo chmod +x start.sh
+            sudo chmod +x start.sh 2>/dev/null 
         fi
 
         # 1.4. 启动服务
         echo -e "${YELLOW}--> 执行首次服务构建和启动 (./start.sh start --build)...${NC}"
-        # 赋予当前用户对 start.sh 的执行权限，确保它可以被 sudo 执行
-        sudo chmod +x start.sh 2>/dev/null 
         sudo ./start.sh start --build
         
         echo -e "${GREEN}服务初始化和启动完成。${NC}"
@@ -68,6 +67,7 @@ else
     fi
 
     echo -e "${YELLOW}--> 正在执行 git fetch 检查更新...${NC}"
+    # 使用 sudo 执行 git fetch
     if sudo git fetch origin "$MAIN_BRANCH"; then
         # 比较本地和远程 HEAD
         LOCAL_HASH=$(git rev-parse HEAD)
@@ -75,7 +75,9 @@ else
 
         if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
             echo -e "${GREEN}发现新版本！正在执行 git pull...${NC}"
-            if sudo git pull origin "$MAIN_BRANCH"; then
+            
+            # 使用 --ff-only 避免分支分歧导致脚本中断
+            if sudo git pull --ff-only origin "$MAIN_BRANCH"; then
                 echo -e "${GREEN}代码拉取成功。${NC}"
                 
                 # 重新赋予 start.sh 权限以防权限丢失 (安全措施)
@@ -88,7 +90,7 @@ else
                 echo -e "${GREEN}服务更新和启动完成。${NC}"
                 STATUS="UPDATED"
             else
-                echo -e "${RED}错误：git pull 失败。请手动检查冲突。${NC}"
+                echo -e "${RED}错误：git pull 失败。本地分支与远程分支有分歧，请手动进入目录执行 'sudo git pull --rebase' 解决。${NC}"
                 STATUS="PULL_FAILED"
             fi
         else
@@ -124,7 +126,12 @@ if [ "$STATUS" != "PULL_FAILED" ] && [ "$STATUS" != "FETCH_FAILED" ] ; then
                 ;;
             "执行 btop (系统资源监控)")
                 echo -e "${YELLOW}--> 正在执行 btop...${NC}"
-                btop
+                # 检查 btop 是否可用 (依赖于 jb_install.sh 安装)
+                if command -v btop &> /dev/null; then
+                    btop
+                else
+                    echo -e "${RED}错误：btop 未安装或不在 PATH 中。请运行安装脚本更新依赖。${NC}"
+                fi
                 break
                 ;;
             "退出")
