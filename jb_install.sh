@@ -94,7 +94,7 @@ sudo chmod +x "$TARGET_FILE"
 
 # 4. 创建或更新全局命令软链接
 if [ ! -f "$JB_COMMAND_PATH" ] || [ ! -L "$JB_COMMAND_PATH" ]; then
-    echo -e "${YELLOW}--> 创建 'jb' 全局命令 (${JB_COMMAND_PATH})...${NC}"
+    echo -e "${YELLOW}--> 创建 '=====${RED}jb${NC}=====' 全局命令 (${JB_COMMAND_PATH})...${NC}"
     # 创建软链接
     sudo ln -sf "$TARGET_FILE" "$JB_COMMAND_PATH"
 else
